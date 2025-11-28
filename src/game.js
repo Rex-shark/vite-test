@@ -2,7 +2,15 @@ import {
     HandLandmarker,
     FilesetResolver
 } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0";
-import targetImg from './assets/img/gesture_heart.png';
+
+
+import imgLotus from './assets/img/gesture_lotus.png';
+import img2 from './assets/img/img2.png';
+import img3 from './assets/img/img3.png';
+import img4 from './assets/img/img4.png';
+
+const targetImages = [img2, img3, img4, imgLotus];
+let currentImageIndex = 0;
 
 let handLandmarker = undefined;
 let runningMode = "IMAGE";
@@ -16,6 +24,9 @@ let targetLandmarks = null;
 async function loadTargetImage() {
     const img = document.getElementById("target-image");
     if (!img) return;
+
+    // Update image source based on current index
+    img.src = targetImages[currentImageIndex];
 
     if (!handLandmarker) {
         console.log("Wait for handLandmarker to load before clicking!");
@@ -153,7 +164,7 @@ async function loadTargetImage() {
 }
 
 export async function initGame(container) {
-    const targetImageSrc = targetImg;
+    // const targetImageSrc = targetImg; // Removed, using array now
     container.innerHTML = `
     <div class="game-container">
       <div class="header">
@@ -164,8 +175,11 @@ export async function initGame(container) {
       <div class="content-area">
         <div class="target-area">
           <h3>Target</h3>
-          <img id="target-image" src="${targetImageSrc}" alt="Target Hand Gesture" />
-          <button id="retry-target-btn" class="game-btn small" style="margin-top: 10px;">Retry Detection</button>
+          <img id="target-image" src="${targetImages[currentImageIndex]}" alt="Target Hand Gesture" />
+          <div class="carousel-controls" style="margin-top: 10px; display: flex; justify-content: center; gap: 20px;">
+            <button id="prev-target-btn" class="game-btn small" style="font-size: 1.5rem; padding: 5px 20px;">&lt;</button>
+            <button id="next-target-btn" class="game-btn small" style="font-size: 1.5rem; padding: 5px 20px;">&gt;</button>
+          </div>
         </div>
         
         <div class="webcam-area">
@@ -191,7 +205,18 @@ export async function initGame(container) {
         document.dispatchEvent(new CustomEvent("navigate-home"));
     });
 
-    document.getElementById("retry-target-btn").addEventListener("click", () => {
+    // Retry button removed
+    // document.getElementById("retry-target-btn").addEventListener("click", () => {
+    //     loadTargetImage();
+    // });
+
+    document.getElementById("prev-target-btn").addEventListener("click", () => {
+        currentImageIndex = (currentImageIndex - 1 + targetImages.length) % targetImages.length;
+        loadTargetImage();
+    });
+
+    document.getElementById("next-target-btn").addEventListener("click", () => {
+        currentImageIndex = (currentImageIndex + 1) % targetImages.length;
         loadTargetImage();
     });
 
