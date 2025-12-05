@@ -3,16 +3,10 @@ import {
     FilesetResolver
 } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0";
 
+// 動態導入圖片
+const images = import.meta.glob('./assets/img/*.{png,jpg,jpeg}', { eager: true });
+const targetImages = Object.values(images).map(module => module.default);
 
-import img1 from './assets/img/img1.png';
-import img2 from './assets/img/img2.png';
-import img3 from './assets/img/img3.png';
-import img4 from './assets/img/img4.jpg';
-import img5 from './assets/img/img5.jpg';
-import img6 from './assets/img/img6.jpg';
-import img7 from './assets/img/img7.jpg';
-
-const targetImages = [img1,img2, img3, img4,img5,img6,img7,];
 let currentImageIndex = 0;
 
 let handLandmarker = undefined;
@@ -181,13 +175,12 @@ async function loadTargetImage() {
     }
 }
 
-export async function initGame(container) {
+export async function initCharadesGame(container) {
     // Reset state to ensure clean initialization
     runningMode = "IMAGE";
     webcamRunning = false;
     isProcessingTarget = false;
 
-    // const targetImageSrc = targetImg; // Removed, using array now
     container.innerHTML = `
     <div class="game-container">
       <div class="header">
@@ -228,11 +221,6 @@ export async function initGame(container) {
         document.dispatchEvent(new CustomEvent("navigate-home"));
     });
 
-    // Retry button removed
-    // document.getElementById("retry-target-btn").addEventListener("click", () => {
-    //     loadTargetImage();
-    // });
-
     document.getElementById("prev-target-btn").addEventListener("click", () => {
         currentImageIndex = (currentImageIndex - 1 + targetImages.length) % targetImages.length;
         loadTargetImage();
@@ -266,7 +254,7 @@ function hasGetUserMedia() {
 
 async function createHandLandmarker() {
     const vision = await FilesetResolver.forVisionTasks(
-        "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm"
+        "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0/wasm"
     );
 
     const baseOptions = {
@@ -560,3 +548,4 @@ function drawLandmarks(ctx, landmarks, style) {
     }
     ctx.restore();
 }
+
