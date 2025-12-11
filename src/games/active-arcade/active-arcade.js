@@ -9,20 +9,14 @@ let gameState = {
     score: 0,
     timeLeft: 60,
     isPlaying: false,
-    blocks: [],
+    circles: [],
     playerY: 0,
     playerX: 0.5,
-    playerFootY: 0,
-    previousFootY: 0,
-    hasAction: false,
-    lastJumpTime: 0,
-    isJumping: false
+    landmarks: {} // Store key landmarks
 };
 
-const BLOCK_WIDTH = 80;
-const BLOCK_HEIGHT = 40;
-const JUMP_THRESHOLD = 0.3;
-const ACTION_THRESHOLD = 0.05; // 腳部移動閾值
+const CIRCLE_MIN_RADIUS = 20;
+const CIRCLE_MAX_RADIUS = 50;
 const GAME_DURATION = 60;
 
 export async function initActiveArcade(container) {
@@ -95,14 +89,10 @@ async function startGame() {
         score: 0,
         timeLeft: GAME_DURATION,
         isPlaying: true,
-        blocks: [],
+        circles: [],
         playerY: 0,
         playerX: 0.5,
-        playerFootY: 0,
-        previousFootY: 0,
-        hasAction: false,
-        lastJumpTime: 0,
-        isJumping: false
+        landmarks: {}
     };
 
     updateScore();
@@ -115,7 +105,7 @@ async function startGame() {
     await startCamera();
     gameLoop();
     startTimer();
-    startBlockGeneration();
+    startCircleGeneration();
 }
 
 function stopGame() {
@@ -167,7 +157,7 @@ function gameLoop() {
         detectPose();
     }
 
-    drawBlocks();
+    drawCircles();
     checkCollisions();
 
     animationFrameId = requestAnimationFrame(gameLoop);
@@ -185,29 +175,14 @@ async function detectPose() {
 
             drawPoseLandmarks(landmarks);
 
-            const nose = landmarks[0];
-            const leftAnkle = landmarks[27];
-            const rightAnkle = landmarks[28];
-
-            const currentFootY = (leftAnkle.y + rightAnkle.y) / 2;
-
-            // 偵測腳部動作（向下踩或向上跳）
-            if (gameState.previousFootY > 0) {
-                const footMovement = Math.abs(currentFootY - gameState.previousFootY);
-
-                // 如果腳部有明顯移動，設定 hasAction 為 true
-                if (footMovement > ACTION_THRESHOLD) {
-                    gameState.hasAction = true;
-                    console.log(`偵測到動作！腳部移動: ${(footMovement * 100).toFixed(1)}%`);
-                }
-            }
-
-            gameState.playerFootY = currentFootY;
-            gameState.playerX = (leftAnkle.x + rightAnkle.x) / 2;
-            gameState.playerY = nose.y;
-            gameState.previousFootY = currentFootY;
-
-            detectJump(nose.y);
+            // Store key landmarks for collision detection
+            // 15: Left Wrist, 16: Right Wrist, 27: Left Ankle, 28: Right Ankle
+            gameState.landmarks = {
+                leftWrist: landmarks[15],
+                rightWrist: landmarks[16],
+                leftAnkle: landmarks[27],
+                rightAnkle: landmarks[28]
+            };
         }
     } catch (error) {
         console.error("姿勢偵測錯誤:", error);
@@ -254,85 +229,64 @@ function drawPoseLandmarks(landmarks) {
     });
 }
 
-let previousY = 0;
-let baselineY = 0;
-let frameCount = 0;
-
-function detectJump(currentY) {
-    frameCount++;
-
-    if (frameCount < 30) {
-        baselineY = (baselineY * (frameCount - 1) + currentY) / frameCount;
-        previousY = currentY;
-        return;
-    }
-
-    const deltaY = baselineY - currentY;
-
-    if (deltaY > JUMP_THRESHOLD && !gameState.isJumping) {
-        gameState.isJumping = true;
-        gameState.hasAction = true; // 跳躍也算動作
-        gameState.lastJumpTime = Date.now();
-        console.log("偵測到跳躍！");
-    }
-
-    if (gameState.isJumping && Date.now() - gameState.lastJumpTime > 500) {
-        gameState.isJumping = false;
-        baselineY = currentY;
-    }
-
-    previousY = currentY;
-}
-
-function drawBlocks() {
-    gameState.blocks.forEach(block => {
-        if (block.active) {
-            canvasCtx.fillStyle = block.color;
-            canvasCtx.fillRect(block.x, block.y, BLOCK_WIDTH, BLOCK_HEIGHT);
+function drawCircles() {
+    gameState.circles.forEach(circle => {
+        if (circle.active) {
+            canvasCtx.beginPath();
+            canvasCtx.arc(circle.x, circle.y, circle.radius, 0, 2 * Math.PI);
+            canvasCtx.fillStyle = circle.color;
+            canvasCtx.fill();
 
             canvasCtx.strokeStyle = '#fff';
             canvasCtx.lineWidth = 3;
-            canvasCtx.strokeRect(block.x, block.y, BLOCK_WIDTH, BLOCK_HEIGHT);
+            canvasCtx.stroke();
         }
     });
 }
 
 function checkCollisions() {
-    // 必須有動作才能得分
-    if (!gameState.hasAction) return;
+    if (!gameState.landmarks.leftWrist) return; // Wait for landmarks
 
-    gameState.blocks.forEach(block => {
-        if (!block.active) return;
+    const limbs = [
+        gameState.landmarks.leftWrist,
+        gameState.landmarks.rightWrist,
+        gameState.landmarks.leftAnkle,
+        gameState.landmarks.rightAnkle
+    ];
 
-        const playerFootScreenY = gameState.playerFootY * canvas.height;
-        const playerScreenX = (1 - gameState.playerX) * canvas.width;
+    gameState.circles.forEach(circle => {
+        if (!circle.active) return;
 
-        const blockCenterX = block.x + BLOCK_WIDTH / 2;
-        const blockCenterY = block.y + BLOCK_HEIGHT / 2;
+        let touched = false;
 
-        const distanceX = Math.abs(playerScreenX - blockCenterX);
-        const distanceY = Math.abs(playerFootScreenY - blockCenterY);
+        for (const limb of limbs) {
+            if (!limb) continue;
 
-        if (distanceX < 100 && distanceY < 100) {
-            console.log(`玩家位置: X=${playerScreenX.toFixed(0)}, FootY=${playerFootScreenY.toFixed(0)}, 有動作: ${gameState.hasAction}`);
-            console.log(`方塊位置: X=${blockCenterX.toFixed(0)}, Y=${blockCenterY.toFixed(0)}`);
-            console.log(`距離: X=${distanceX.toFixed(0)}, Y=${distanceY.toFixed(0)}`);
+            const limbX = (1 - limb.x) * canvas.width;
+            const limbY = limb.y * canvas.height;
+
+            const dx = limbX - circle.x;
+            const dy = limbY - circle.y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+
+            // Check if limb is inside circle (with some tolerance)
+            if (distance < circle.radius + 20) {
+                touched = true;
+                break;
+            }
         }
 
-        if (distanceX < BLOCK_WIDTH / 2 + 20 && distanceY < BLOCK_HEIGHT / 2 + 30) {
-            console.log("✅ 踩到方塊！得分！");
-            block.active = false;
+        if (touched) {
+            console.log("✅ 觸碰到圓圈！得分！");
+            circle.active = false;
             gameState.score += 10;
             updateScore();
 
-            showScorePopup(block.x, block.y);
-
-            // 重置動作狀態，避免連續得分
-            gameState.hasAction = false;
+            showScorePopup(circle.x, circle.y);
         }
     });
 
-    gameState.blocks = gameState.blocks.filter(block => block.active);
+    gameState.circles = gameState.circles.filter(circle => circle.active);
 }
 
 function showScorePopup(x, y) {
@@ -341,7 +295,7 @@ function showScorePopup(x, y) {
     canvasCtx.fillText('+10', x, y);
 }
 
-function startBlockGeneration() {
+function startCircleGeneration() {
     if (!gameState.isPlaying) return;
 
     const interval = setInterval(() => {
@@ -350,32 +304,32 @@ function startBlockGeneration() {
             return;
         }
 
-        generateBlock();
-    }, 2000);
+        generateCircle();
+    }, 1500); // Generate every 1.5 seconds
 }
 
-function generateBlock() {
-    const colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#FFA07A', '#98D8C8'];
-    const positions = [
-        { x: 160, y: canvas.height - 40 },
-        { x: 240, y: canvas.height - 40 },
-        { x: 320, y: canvas.height - 40 },
-        { x: 400, y: canvas.height - 40 }
-    ];
+function generateCircle() {
+    const colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#FFA07A', '#98D8C8', '#F7D794', '#CF6A87'];
 
-    const randomPos = positions[Math.floor(Math.random() * positions.length)];
+    const radius = Math.floor(Math.random() * (CIRCLE_MAX_RADIUS - CIRCLE_MIN_RADIUS + 1)) + CIRCLE_MIN_RADIUS;
+
+    // Ensure circle is within canvas bounds
+    const x = Math.random() * (canvas.width - 2 * radius) + radius;
+    const y = Math.random() * (canvas.height - 2 * radius) + radius;
+
     const randomColor = colors[Math.floor(Math.random() * colors.length)];
 
-    gameState.blocks.push({
-        x: randomPos.x,
-        y: randomPos.y,
+    gameState.circles.push({
+        x: x,
+        y: y,
+        radius: radius,
         color: randomColor,
         active: true,
         createdAt: Date.now()
     });
 
-    if (gameState.blocks.length > 6) {
-        gameState.blocks.shift();
+    if (gameState.circles.length > 5) {
+        gameState.circles.shift();
     }
 }
 
